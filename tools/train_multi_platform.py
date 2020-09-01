@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import argparse
 import os
+from sys import version_info
 
 import paddle.fluid as fluid
 
@@ -110,16 +111,20 @@ def main(args):
         compiled_valid_prog = program.compile(
             config, valid_prog, share_prog=compiled_train_prog)
 
+    vdl_writer = None
     if args.vdl_dir:
-        from visualdl import LogWriter
-        vdl_writer = LogWriter(args.vdl_dir)
-    else:
-        vdl_writer = None
+        if version_info.major == 2:
+            logger.info(
+                "visualdl is just supported for python3, so it is disabled in python2..."
+            )
+        else:
+            from visualdl import LogWriter
+            vdl_writer = LogWriter(args.vdl_dir)
 
     for epoch_id in range(config.epochs):
         # 1. train with train dataset
         program.run(train_dataloader, exe, compiled_train_prog, train_fetchs,
-                    epoch_id, 'train', vdl_writer)
+                    epoch_id, 'train', config, vdl_writer)
 
         # 2. validate with validate dataset
         if config.validate and epoch_id % config.valid_interval == 0:
@@ -128,11 +133,11 @@ def main(args):
                 with ema.apply(exe):
                     top1_acc = program.run(valid_dataloader, exe,
                                            compiled_valid_prog, valid_fetchs,
-                                           epoch_id, 'valid')
+                                           epoch_id, 'valid', config)
                 logger.info(logger.coloring("EMA validate over!"))
 
             top1_acc = program.run(valid_dataloader, exe, compiled_valid_prog,
-                                   valid_fetchs, epoch_id, 'valid')
+                                   valid_fetchs, epoch_id, 'valid', config)
             if top1_acc > best_top1_acc:
                 best_top1_acc = top1_acc
                 message = "The best top1 acc {:.5f}, in epoch: {:d}".format(
